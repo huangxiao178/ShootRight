@@ -142,13 +142,13 @@ private extension CIImage {
 
     func temperature(target: CGFloat) -> CIImage {
         applyingFilter("CITemperatureAndTint", parameters: [
-            kCIInputNeutralKey: CIVector(x: 6500, y: 0),
-            kCIInputTargetNeutralKey: CIVector(x: target, y: 0)
+            "inputNeutral": CIVector(x: 6500, y: 0),
+            "inputTargetNeutral": CIVector(x: target, y: 0)
         ])
     }
 
     func gamma(_ value: CGFloat) -> CIImage {
-        applyingFilter("CIGammaAdjust", parameters: [kCIInputPowerKey: value])
+        applyingFilter("CIGammaAdjust", parameters: ["inputPower": value])
     }
 
     func vignette(_ value: CGFloat) -> CIImage {

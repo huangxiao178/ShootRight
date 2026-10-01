@@ -72,7 +72,7 @@ final class CameraService: NSObject {
                 session.addOutput(videoOutput)
             }
 
-            photoOutput.isHighResolutionCaptureEnabled = true
+            photoOutput.maxPhotoDimensions = CMVideoDimensions(width: 4032, height: 3024)
             if session.canAddOutput(photoOutput) {
                 session.addOutput(photoOutput)
             }
