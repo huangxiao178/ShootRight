@@ -31,8 +31,8 @@ final class CameraService: NSObject {
     private var frameCounter = 0
     private(set) var isConfigured = false
 
-    /// 分析帧回调（视频输出队列线程），参数：(像素缓冲, 竖屏直立尺寸)
-    var onAnalysisFrame: ((CVPixelBuffer, CGSize) -> Void)?
+    /// 分析帧回调（视频输出队列线程），参数：原始像素缓冲
+    var onAnalysisFrame: ((CVPixelBuffer) -> Void)?
     var onError: ((Error) -> Void)?
 
     // MARK: - 配置
@@ -82,6 +82,7 @@ final class CameraService: NSObject {
 
             session.commitConfiguration()
             isConfigured = true
+            AppLogger.log("camera configured")
         }
     }
 
@@ -147,12 +148,9 @@ extension CameraService: AVCaptureVideoDataOutputSampleBufferDelegate {
                        from connection: AVCaptureConnection) {
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         frameCounter += 1
-        // 每 8 帧抽 1 帧做 AI 分析（约 3-4fps）
-        if frameCounter % 8 == 0 {
-            // 竖屏直立后的尺寸（宽高对调）
-            let uprightSize = CGSize(width: CVPixelBufferGetHeight(buffer),
-                                     height: CVPixelBufferGetWidth(buffer))
-            onAnalysisFrame?(buffer, uprightSize)
+        // 每 12 帧抽 1 帧做 AI 分析（约 2.5fps，对构图引导足够）
+        if frameCounter % 12 == 0 {
+            onAnalysisFrame?(buffer)
         }
     }
 }

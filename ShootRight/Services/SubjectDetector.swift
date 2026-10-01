@@ -1,20 +1,19 @@
 import Vision
-import AVFoundation
+import CoreGraphics
 
 /// 主体检测：人体框 + 人脸框 + 显著性区域（全本地）
 final class SubjectDetector {
     private let queue = DispatchQueue(label: "com.shootright.subject")
 
-    func detect(pixelBuffer: CVPixelBuffer, completion: @escaping (Detections) -> Void) {
+    /// 基于不可变 CGImage 检测（调用方负责传入直立图）
+    func detect(cgImage: CGImage, completion: @escaping (Detections) -> Void) {
         queue.async {
             let person = VNDetectHumanRectanglesRequest()
             let face = VNDetectFaceRectanglesRequest()
             let saliency = VNGenerateAttentionBasedSaliencyImageRequest()
 
             do {
-                let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer,
-                                                    orientation: .right,
-                                                    options: [:])
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 try handler.perform([person, face, saliency])
 
                 var detections = Detections()

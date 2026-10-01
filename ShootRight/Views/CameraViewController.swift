@@ -82,9 +82,10 @@ final class CameraViewController: UIViewController {
                 try await camera.configure()
                 previewLayer?.connection?.videoOrientation = .portrait
                 camera.start()
+                AppLogger.log("session started")
                 motion.start()
-                camera.onAnalysisFrame = { [weak self] buffer, size in
-                    self?.handleAnalysisFrame(buffer, uprightSize: size)
+                camera.onAnalysisFrame = { [weak self] buffer in
+                    self?.handleAnalysisFrame(buffer)
                 }
                 camera.onError = { [weak self] error in
                     DispatchQueue.main.async {
@@ -92,6 +93,7 @@ final class CameraViewController: UIViewController {
                     }
                 }
                 refreshFilters()
+                AppLogger.log("filters ready")
             } catch {
                 state.errorMessage = error.localizedDescription
             }
@@ -100,14 +102,21 @@ final class CameraViewController: UIViewController {
 
     // MARK: - 分析管线（视频输出队列线程）
 
-    private func handleAnalysisFrame(_ buffer: CVPixelBuffer, uprightSize: CGSize) {
+    private func handleAnalysisFrame(_ buffer: CVPixelBuffer) {
         autoreleasepool {
-            analysisCounter += 1
+            // 同步转为不可变小图（最长边 720）：消除异步处理期间的缓冲复用风险
+            guard let image = FilterRenderer.analysisImage(from: buffer) else { return }
+            let uprightSize = CGSize(width: image.width, height: image.height)
 
-            detector.detect(pixelBuffer: buffer) { [weak self] detections in
+            analysisCounter += 1
+            if analysisCounter == 1 {
+                AppLogger.log("first analysis frame \(uprightSize)")
+            }
+
+            detector.detect(cgImage: image) { [weak self] detections in
                 guard let self else { return }
                 if self.state.sceneOverride == nil {
-                    self.classifier.classify(pixelBuffer: buffer, personCount: detections.personCount) { scene, _ in
+                    self.classifier.classify(cgImage: image, personCount: detections.personCount) { scene, _ in
                         if self.state.sceneOverride == nil {
                             self.updateScene(scene)
                         }
@@ -137,9 +146,9 @@ final class CameraViewController: UIViewController {
                 }
             }
 
-            // 每 ~8 次分析（约 2 秒）刷新滤镜缩略图
-            if analysisCounter % 8 == 0 {
-                refreshThumbnails(buffer: buffer)
+            // 每 ~10 次分析（约 4 秒）刷新滤镜缩略图
+            if analysisCounter % 10 == 0 {
+                refreshThumbnails(cgImage: image)
             }
         }
     }
@@ -147,6 +156,7 @@ final class CameraViewController: UIViewController {
     private func updateScene(_ scene: PhotoScene) {
         guard scene != lastClassifiedScene else { return }
         lastClassifiedScene = scene
+        AppLogger.log("scene -> \(scene)")
         state.scene = scene
         refreshFilters()
     }
@@ -159,12 +169,12 @@ final class CameraViewController: UIViewController {
         }
     }
 
-    private func refreshThumbnails(buffer: CVPixelBuffer) {
+    private func refreshThumbnails(cgImage: CGImage) {
         let filters = state.filters
         guard !filters.isEmpty else { return }
         var thumbs: [String: UIImage] = [:]
         for filter in filters {
-            if let thumb = FilterRenderer.thumbnail(from: buffer, filter: filter, size: 64) {
+            if let thumb = FilterRenderer.thumbnail(from: cgImage, filter: filter, size: 64) {
                 thumbs[filter.id] = thumb
             }
         }
@@ -180,27 +190,30 @@ final class CameraViewController: UIViewController {
         state.isCapturing = true
 
         camera.capturePhoto { [weak self] result in
-            guard let self else { return }
-            self.state.isCapturing = false
-            switch result {
-            case .success(let image):
-                let scene = self.state.effectiveScene
-                let filter = self.state.selectedFilter
-                    ?? FilterLibrary.filters(for: scene).first
-                    ?? FilterLibrary.filters(for: .unknown).first!
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.state.isCapturing = false
+                switch result {
+                case .success(let image):
+                    AppLogger.log("photo captured")
+                    let scene = self.state.effectiveScene
+                    let filter = self.state.selectedFilter
+                        ?? FilterLibrary.filters(for: scene).first
+                        ?? FilterLibrary.filters(for: .unknown).first!
 
-                let ciImage = CIImage(image: image) ?? CIImage.empty()
-                let filteredImage = FilterRenderer.apply(filter, to: ciImage, intensity: 1)
-                let output = FilterRenderer.render(filteredImage) ?? image
+                    let ciImage = CIImage(image: image) ?? CIImage.empty()
+                    let filteredImage = FilterRenderer.apply(filter, to: ciImage, intensity: 1)
+                    let output = FilterRenderer.render(filteredImage) ?? image
 
-                let photo = CapturedPhoto(image: output,
-                                          originalImage: image,
-                                          scene: scene,
-                                          filter: filter,
-                                          explanation: scene.explanation)
-                self.state.onCapturedPhoto?(photo)
-            case .failure(let error):
-                self.state.errorMessage = error.localizedDescription
+                    let photo = CapturedPhoto(image: output,
+                                              originalImage: image,
+                                              scene: scene,
+                                              filter: filter,
+                                              explanation: scene.explanation)
+                    self.state.onCapturedPhoto?(photo)
+                case .failure(let error):
+                    self.state.errorMessage = error.localizedDescription
+                }
             }
         }
     }

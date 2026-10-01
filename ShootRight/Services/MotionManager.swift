@@ -12,7 +12,7 @@ final class MotionManager: ObservableObject {
 
     func start() {
         guard manager.isDeviceMotionAvailable else { return }
-        manager.deviceMotionUpdateInterval = 0.05 // 20fps，水平仪顺滑
+        manager.deviceMotionUpdateInterval = 0.1 // 10fps，足够水平仪平滑且不增加负担
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
             guard let self, let motion else { return }
             self.rollDegrees = motion.attitude.roll * 180 / .pi

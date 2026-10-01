@@ -1,11 +1,12 @@
 import Vision
-import AVFoundation
+import CoreGraphics
 
 /// 场景识别：Vision 内置分类器（全本地，零模型文件）
 final class SceneClassifier {
     private let queue = DispatchQueue(label: "com.shootright.classifier")
 
-    func classify(pixelBuffer: CVPixelBuffer,
+    /// 基于不可变 CGImage 分类（调用方负责传入直立图）
+    func classify(cgImage: CGImage,
                   personCount: Int,
                   completion: @escaping (PhotoScene, Float) -> Void) {
         queue.async {
@@ -13,9 +14,7 @@ final class SceneClassifier {
             request.usesCPUOnly = false
 
             do {
-                let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer,
-                                                    orientation: .right,
-                                                    options: [:])
+                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
                 try handler.perform([request])
                 let labels = request.results ?? []
                 let scene = Self.map(labels: labels, personCount: personCount)
