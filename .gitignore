@@ -1,0 +1,6 @@
+# 构建产物与本地配置（不要提交到 GitHub）
+build/
+*.ipa
+xcuserdata/
+DerivedData/
+.DS_Store
